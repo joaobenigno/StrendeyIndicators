@@ -1,31 +1,53 @@
-package io.github.strendey.damageindicators.instrumentation;
+package io.github.strendey.damageindicators.instrumentation.transformer;
 
-import cpw.mods.fml.relauncher.IFMLLoadingPlugin;
-import io.github.strendey.damageindicators.StrendeyIndicators;
-import io.github.strendey.damageindicators.instrumentation.transformer.EntityPlayerTransformer;
+import javassist.*;
+import net.minecraft.launchwrapper.IClassTransformer;
 
-import java.util.Map;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 
-public class FMLLoadingPlugin implements IFMLLoadingPlugin {
+public class EntityPlayerTransformer implements IClassTransformer {
 
-    public String[] getASMTransformerClass() {
-        return new String[]{EntityPlayerTransformer.class.getName()};
+    @Override
+    public byte[] transform(String name, String transformedName, byte[] basicClass) {
+        if ("wn".equals(name) || "yz".equals(name) || "net.minecraft.entity.player.EntityPlayer".equals(transformedName)) {
+            ClassPool pool = ClassPool.getDefault();
+            CtClass classFile = null;
+
+            try {
+                classFile = pool.getOrNull(transformedName);
+                if (classFile == null) {
+                    classFile = pool.getOrNull(name);
+                }
+
+                if (classFile != null) {
+                    if (classFile.isFrozen()) {
+                        classFile.defrost();
+                    }
+                    classFile.detach(); 
+                }
+
+                classFile = pool.makeClass(new ByteArrayInputStream(basicClass));
+
+                CtMethod targetMethod;
+                try {
+                    targetMethod = classFile.getDeclaredMethod("getDisplayName");
+                } catch (NotFoundException e) {
+                    targetMethod = classFile.getDeclaredMethod("getDisplayNameString");
+                }
+
+                targetMethod.insertBefore("this.displayname = null;");
+                return classFile.toBytecode();
+
+            } catch (Throwable t) {
+                t.printStackTrace();
+            } finally {
+                if (classFile != null) {
+                    classFile.detach();
+                }
+            }
+        }
+
+        return basicClass;
     }
-
-    public String getModContainerClass() {
-        return StrendeyIndicators.class.getName();
-    }
-
-    public String getSetupClass() {
-        return null;
-    }
-
-    public void injectData(Map<String, Object> data) {
-
-    }
-
-    public String getAccessTransformerClass() {
-        return null;
-    }
-
 }
